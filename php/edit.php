@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once 'config.php';
+require_once __DIR__ . '/inc/db.php';
+$use_db = db_is_connected();
 
 // Cek status login
 if (!isset($_SESSION['user_email'])) {
@@ -16,9 +18,19 @@ $jenis_list = ['Transaksi Masuk', 'Transaksi Keluar'];
 
 // Ambil data transaksi
 if (!empty($id)) {
-    $transaksi = getTransaksiById($id);
-    if (!$transaksi) {
-        $error = 'Transaksi tidak ditemukan';
+    if ($use_db) {
+        $pdo = get_db();
+        $stmt = $pdo->prepare('SELECT id,tanggal,jenis,kategori,nominal,deskripsi,unit,jasa,detail_pekerjaan,createdAt FROM transaksi WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $transaksi = $stmt->fetch();
+        if (!$transaksi) {
+            $error = 'Transaksi tidak ditemukan (DB)';
+        }
+    } else {
+        $transaksi = getTransaksiById($id);
+        if (!$transaksi) {
+            $error = 'Transaksi tidak ditemukan';
+        }
     }
 }
 
@@ -32,18 +44,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
     if (empty($jenis) || empty($kategori) || empty($nominal) || !is_numeric($nominal)) {
         $error = 'Semua field harus diisi dengan benar';
     } else {
-        $update_data = [
-            'jenis' => $jenis,
-            'kategori' => $kategori,
-            'nominal' => (int)$nominal,
-            'deskripsi' => $deskripsi
-        ];
-        
-        if (updateTransaksi($id, $update_data)) {
-            $success = 'Transaksi berhasil diupdate!';
-            $transaksi = getTransaksiById($id);
+        if ($use_db) {
+            try {
+                $pdo = get_db();
+                $stmt = $pdo->prepare('UPDATE transaksi SET jenis = :jenis, kategori = :kategori, nominal = :nominal, deskripsi = :deskripsi WHERE id = :id');
+                $stmt->execute([
+                    ':jenis' => $jenis,
+                    ':kategori' => $kategori,
+                    ':nominal' => (float)$nominal,
+                    ':deskripsi' => $deskripsi,
+                    ':id' => $id
+                ]);
+                $success = 'Transaksi berhasil diupdate (DB)!';
+                // refresh the transaksi data
+                $stmt2 = $pdo->prepare('SELECT id,tanggal,jenis,kategori,nominal,deskripsi,unit,jasa,detail_pekerjaan,createdAt FROM transaksi WHERE id = :id LIMIT 1');
+                $stmt2->execute([':id' => $id]);
+                $transaksi = $stmt2->fetch();
+            } catch (Exception $e) {
+                $error = 'Gagal mengupdate transaksi: '.$e->getMessage();
+            }
         } else {
-            $error = 'Gagal mengupdate transaksi';
+            $update_data = [
+                'jenis' => $jenis,
+                'kategori' => $kategori,
+                'nominal' => (int)$nominal,
+                'deskripsi' => $deskripsi
+            ];
+            
+            if (updateTransaksi($id, $update_data)) {
+                $success = 'Transaksi berhasil diupdate!';
+                $transaksi = getTransaksiById($id);
+            } else {
+                $error = 'Gagal mengupdate transaksi';
+            }
         }
     }
 }
@@ -267,6 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save'])) {
                         name="deskripsi"
                     ><?php echo htmlspecialchars($transaksi['deskripsi'] ?? ''); ?></textarea>
                 </div>
+                
                 
                 <div class="form-actions">
                     <a href="tampil.php" class="btn btn-cancel">Batal</a>

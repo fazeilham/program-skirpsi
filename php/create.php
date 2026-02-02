@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once 'config.php';
+require_once __DIR__ . '/inc/db.php';
+$use_db = db_is_connected();
 
 // Cek status login
 if (!isset($_SESSION['user_email'])) {
@@ -18,6 +20,9 @@ $jenis = '';
 $kategori = '';
 $nominal = '';
 $deskripsi = '';
+$unit = '';
+$jasa = '';
+$detail_pekerjaan = '';
 
 // Proses penyimpanan transaksi
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -26,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kategori = $_POST['kategori'] ?? '';
     $nominal = $_POST['nominal'] ?? '';
     $deskripsi = $_POST['deskripsi'] ?? '';
+    $unit = $_POST['unit'] ?? '';
+    $jasa = $_POST['jasa'] ?? '';
+    $detail_pekerjaan = $_POST['detail_pekerjaan'] ?? '';
     
     // Validasi input
     if (empty($tanggal)) {
@@ -38,27 +46,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Nominal harus diisi dengan angka';
     } else {
         // Simpan transaksi
-        $transaksi = [
-            'tanggal' => $tanggal,
-            'jenis' => $jenis,
-            'kategori' => $kategori,
-            'nominal' => (int)$nominal,
-            'deskripsi' => $deskripsi
-        ];
-        
-        tambahTransaksi($transaksi);
-        $success = 'Transaksi berhasil disimpan!';
-        
-        // Reset form
-        $tanggal = '';
-        $jenis = '';
-        $kategori = '';
-        $nominal = '';
-        $deskripsi = '';
+        if ($use_db) {
+            try {
+                $pdo = get_db();
+                $id = uniqid('tx_', true);
+                $stmt = $pdo->prepare('INSERT INTO transaksi (id,tanggal,jenis,kategori,nominal,deskripsi,unit,jasa,detail_pekerjaan,createdAt) VALUES (:id,:tanggal,:jenis,:kategori,:nominal,:deskripsi,:unit,:jasa,:detail,:createdAt)');
+                $stmt->execute([
+                    ':id' => $id,
+                    ':tanggal' => $tanggal,
+                    ':jenis' => $jenis,
+                    ':kategori' => $kategori,
+                    ':nominal' => (float)$nominal,
+                    ':deskripsi' => $deskripsi,
+                    ':unit' => $unit,
+                    ':jasa' => $jasa,
+                    ':detail' => $detail_pekerjaan,
+                    ':createdAt' => date('Y-m-d H:i:s')
+                ]);
+                $success = 'Transaksi berhasil disimpan (DB)!';
+
+                // Reset form
+                $tanggal = '';
+                $jenis = '';
+                $kategori = '';
+                $nominal = '';
+                $deskripsi = '';
+                $unit = '';
+                $jasa = '';
+                $detail_pekerjaan = '';
+            } catch (Exception $e) {
+                $error = 'Gagal menyimpan ke database: ' . $e->getMessage();
+            }
+        } else {
+            $transaksi = [
+                'tanggal' => $tanggal,
+                'jenis' => $jenis,
+                'kategori' => $kategori,
+                'nominal' => (int)$nominal,
+                'deskripsi' => $deskripsi,
+                'unit' => $unit,
+                'jasa' => $jasa,
+                'detail_pekerjaan' => $detail_pekerjaan
+            ];
+            
+            tambahTransaksi($transaksi);
+            $success = 'Transaksi berhasil disimpan!';
+            
+            // Reset form
+            $tanggal = '';
+            $jenis = '';
+            $kategori = '';
+            $nominal = '';
+            $deskripsi = '';
+            $unit = '';
+            $jasa = '';
+            $detail_pekerjaan = '';
+        }
     }
 }
 
-$transaksi_list = getTransaksi();
+if ($use_db) {
+    $pdo = get_db();
+    $stmt = $pdo->query('SELECT id,tanggal,jenis,kategori,nominal,deskripsi,createdAt FROM transaksi ORDER BY createdAt DESC LIMIT 5');
+    $transaksi_list = $stmt->fetchAll();
+} else {
+    $transaksi_list = getTransaksi();
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -321,6 +374,24 @@ $transaksi_list = getTransaksi();
                 <label for="deskripsi">Deskripsi / Keterangan</label>
                 <textarea id="deskripsi" name="deskripsi"
                     placeholder="Masukkan deskripsi atau keterangan transaksi (opsional)"><?php echo htmlspecialchars($deskripsi); ?></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="unit">Unit</label>
+                <textarea id="unit" name="unit"
+                    placeholder="Masukkan rincian unit motor atau barang yang masuk (opsional)"><?php echo htmlspecialchars($unit); ?></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="jasa">Jasa</label>
+                <textarea id="jasa" name="jasa"
+                    placeholder="Masukkan detail biaya jasa atau layanan (opsional)"><?php echo htmlspecialchars($jasa); ?></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="detail_pekerjaan">Detail Pekerjaan</label>
+                <textarea id="detail_pekerjaan" name="detail_pekerjaan"
+                    placeholder="Masukkan detail pekerjaan atau informasi tambahan lainnya (opsional)"><?php echo htmlspecialchars($detail_pekerjaan); ?></textarea>
             </div>
 
             <button type="submit" class="submit-button">💾 Simpan Transaksi</button>

@@ -220,18 +220,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
             <button type="submit" name="login" class="login-button">Login</button>
         </form>
-
-        <div class="demo-info">
-            <strong>Demo Account (Akun Demo):</strong>
-            <div class="demo-account">
-                Email: admin@example.com<br>
-                Password: admin123
-            </div>
-            <div class="demo-account">
-                Email: user@example.com<br>
-                Password: user123
-            </div>
-        </div>
     </div>
 </body>
 

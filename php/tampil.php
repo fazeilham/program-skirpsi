@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once 'config.php';
+require_once __DIR__ . '/inc/db.php';
+$use_db = db_is_connected();
 
 // Cek status login
 if (!isset($_SESSION['user_email'])) {
@@ -11,16 +13,34 @@ if (!isset($_SESSION['user_email'])) {
 $success = '';
 $error = '';
 $jenis_list = ['Transaksi Masuk', 'Transaksi Keluar'];
-$transaksi_list = getTransaksi();
+if ($use_db) {
+    $pdo = get_db();
+    $stmt = $pdo->query('SELECT id,tanggal,jenis,kategori,nominal,deskripsi,createdAt FROM transaksi ORDER BY createdAt DESC');
+    $transaksi_list = $stmt->fetchAll();
+} else {
+    $transaksi_list = getTransaksi();
+}
 
 // Proses hapus
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     $delete_id = $_POST['delete_id'];
-    if (hapusTransaksi($delete_id)) {
-        $success = 'Transaksi berhasil dihapus';
-        header('Refresh: 1');
+    if ($use_db) {
+        try {
+            $pdo = get_db();
+            $stmt = $pdo->prepare('DELETE FROM transaksi WHERE id = :id');
+            $stmt->execute([':id' => $delete_id]);
+            $success = 'Transaksi berhasil dihapus (DB)';
+            header('Refresh: 1');
+        } catch (Exception $e) {
+            $error = 'Gagal menghapus transaksi: ' . $e->getMessage();
+        }
     } else {
-        $error = 'Gagal menghapus transaksi';
+        if (hapusTransaksi($delete_id)) {
+            $success = 'Transaksi berhasil dihapus';
+            header('Refresh: 1');
+        } else {
+            $error = 'Gagal menghapus transaksi';
+        }
     }
 }
 
@@ -35,23 +55,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_id'])) {
     if (empty($jenis) || empty($kategori) || empty($nominal) || !is_numeric($nominal)) {
         $error = 'Semua field harus diisi dengan benar';
     } else {
-        $transaksi = [
-            'jenis' => $jenis,
-            'kategori' => $kategori,
-            'nominal' => (int)$nominal,
-            'deskripsi' => $deskripsi
-        ];
-        
-        if (updateTransaksi($update_id, $transaksi)) {
-            $success = 'Transaksi berhasil diupdate';
-            header('Refresh: 1');
+        if ($use_db) {
+            try {
+                $pdo = get_db();
+                $stmt = $pdo->prepare('UPDATE transaksi SET jenis = :jenis, kategori = :kategori, nominal = :nominal, deskripsi = :deskripsi WHERE id = :id');
+                $stmt->execute([
+                    ':jenis' => $jenis,
+                    ':kategori' => $kategori,
+                    ':nominal' => (float)$nominal,
+                    ':deskripsi' => $deskripsi,
+                    ':id' => $update_id
+                ]);
+                $success = 'Transaksi berhasil diupdate (DB)';
+                header('Refresh: 1');
+            } catch (Exception $e) {
+                $error = 'Gagal mengupdate transaksi: ' . $e->getMessage();
+            }
         } else {
-            $error = 'Gagal mengupdate transaksi';
+            $transaksi = [
+                'jenis' => $jenis,
+                'kategori' => $kategori,
+                'nominal' => (int)$nominal,
+                'deskripsi' => $deskripsi
+            ];
+            
+            if (updateTransaksi($update_id, $transaksi)) {
+                $success = 'Transaksi berhasil diupdate';
+                header('Refresh: 1');
+            } else {
+                $error = 'Gagal mengupdate transaksi';
+            }
         }
     }
 }
 
-$transaksi_list = getTransaksi();
+// Refresh the list from the active storage (DB when available, otherwise JSON)
+if ($use_db) {
+    try {
+        $pdo = get_db();
+        $stmt = $pdo->query('SELECT id,tanggal,jenis,kategori,nominal,deskripsi,unit,jasa,detail_pekerjaan,createdAt FROM transaksi ORDER BY createdAt DESC');
+        $transaksi_list = $stmt->fetchAll();
+    } catch (Exception $e) {
+        $error = 'Gagal mengambil data dari DB: ' . $e->getMessage();
+        $transaksi_list = [];
+    }
+} else {
+    $transaksi_list = getTransaksi();
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
